@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PolyScope — Polymarket Participation Analytics</title>
+  <meta name="description" content="Community-built analytics dashboard for Polymarket ecosystem participation. Check your trading score, estimated allocation, and global ranking." />
+  <meta property="og:title" content="PolyScope — Polymarket Analytics" />
+  <meta property="og:description" content="Check your Polymarket participation score and estimated allocation. Community-built, not affiliated with Polymarket." />
+  <meta property="og:type" content="website" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #060608;
+      --bg2:         #0C0C10;
+      --bg3:         #12121A;
+      --card:        #0F0F16;
+      --border:      #1E1E2C;
+      --border2:     #2A2A3C;
+      --txt:         #EEEEF4;
+      --txt2:        #8888A4;
+      --txt3:        #555570;
+      --green:       #00E596;
+      --green-dim:   #00E59622;
+      --green-dark:  #00A86B;
+      --purple:      #9B6DFF;
+      --purple-dim:  #9B6DFF18;
+      --red:         #FF4D6A;
+      --red-dim:     #FF4D6A18;
+      --yellow:      #FFB800;
+      --yellow-dim:  #FFB80018;
+      --font-mono:   'DM Mono', monospace;
+      --font-body:   'Syne', sans-serif;
+      --radius:      12px;
+      --radius-lg:   20px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--txt);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Noise texture overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg2); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    /* ── Layout ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+    .relative { position: relative; }
+    .z1 { position: relative; z-index: 1; }
+
+    /* ── Navbar ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 60px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(6,6,8,0.85);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+    }
+    nav .inner {
+      width: 100%; max-width: 1100px;
+      margin: 0 auto; padding: 0 20px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo {
+      font-size: 18px; font-weight: 800;
+      color: var(--green);
+      letter-spacing: -0.5px;
+      text-decoration: none;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .logo-dot {
+      width: 8px; height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(0,229,150,0.4); }
+      50%      { box-shadow: 0 0 0 8px rgba(0,229,150,0); }
+    }
+    .nav-badge {
+      font-size: 11px; font-family: var(--font-mono);
+      background: var(--yellow-dim); color: var(--yellow);
+      border: 1px solid rgba(255,184,0,0.25);
+      padding: 2px 8px; border-radius: 100px;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Hero ── */
+    #hero {
+      padding: 140px 0 80px;
+      text-align: center;
+      position: relative;
+    }
+    .glow-orb {
+      position: absolute;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(0,229,150,0.06) 0%, transparent 70%);
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .hero-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-family: var(--font-mono);
+      background: var(--green-dim); color: var(--green);
+      border: 1px solid rgba(0,229,150,0.2);
+      padding: 4px 12px; border-radius: 100px;
+      margin-bottom: 28px;
+      letter-spacing: 0.5px;
+    }
+    h1 {
+      font-size: clamp(36px, 6vw, 72px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -2px;
+      margin-bottom: 20px;
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, var(--green) 0%, #00B8FF 50%, var(--purple) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      font-size: 18px;
+      color: var(--txt2);
+      max-width: 560px; margin: 0 auto 48px;
+      line-height: 1.7;
+    }
+
+    /* ── Search Box ── */
+    .search-wrap {
+      max-width: 620px; margin: 0 auto;
+      position: relative;
+    }
+    .search-box {
+      display: flex; align-items: center;
+      background: var(--card);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-lg);
+      padding: 6px 6px 6px 20px;
+      gap: 10px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .search-box:focus-within {
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(0,229,150,0.12), 0 0 40px rgba(0,229,150,0.06);
+    }
+    .search-box input {
+      flex: 1;
+      background: none; border: none; outline: none;
+      color: var(--txt);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      placeholder-color: var(--txt3);
+    }
+    .search-box input::placeholder { color: var(--txt3); }
+    .btn-check {
+      background: var(--green);
+      color: #000;
+      border: none; outline: none;
+      font-family: var(--font-body);
+      font-size: 14px; font-weight: 700;
+      padding: 12px 24px; border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      white-space: nowrap;
+      letter-spacing: -0.3px;
+    }
+    .btn-check:hover   { background: #00c884; }
+    .btn-check:active  { transform: scale(0.97); }
+    .btn-check:disabled {
+      background: var(--border2); color: var(--txt3); cursor: not-allowed;
+    }
+    .search-hint {
+      margin-top: 12px;
+      font-size: 12px; color: var(--txt3);
+      font-family: var(--font-mono);
+    }
+
+    /* ── Stats Row ── */
+    .stats-row {
+      display: flex; justify-content: center; gap: 40px;
+      margin-top: 64px;
+      flex-wrap: wrap;
+    }
+    .stat-pill {
+      text-align: center;
+    }
+    .stat-pill .val {
+      font-size: 28px; font-weight: 800;
+      color: var(--green); font-family: var(--font-mono);
+      letter-spacing: -1px;
+    }
+    .stat-pill .lbl {
+      font-size: 12px; color: var(--txt3);
+      margin-top: 2px; letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .stat-divider {
+      width: 1px; background: var(--border); align-self: stretch;
+    }
+
+    /* ── Disclaimer Banner ── */
+    .disclaimer {
+      background: rgba(255,184,0,0.05);
+      border: 1px solid rgba(255,184,0,0.15);
+      border-radius: var(--radius);
+      padding: 12px 20px;
+      font-size: 12px; color: rgba(255,184,0,0.7);
+      font-family: var(--font-mono);
+      display: flex; align-items: flex-start; gap: 10px;
+      line-height: 1.6;
+    }
+    .disclaimer.compact { padding: 10px 14px; font-size: 11px; }
+
+    /* ── Loading ── */
+    #loading { display: none; text-align: center; padding: 80px 0; }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-addr {
+      font-family: var(--font-mono); font-size: 13px;
+      color: var(--txt2); margin-top: 8px;
+    }
+
+    /* ── Error ── */
+    #error-box {
+      display: none;
+      background: var(--red-dim);
+      border: 1px solid rgba(255,77,106,0.2);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin: 20px 0;
+      color: var(--red);
+      font-size: 14px;
+    }
+
+    /* ── Results ── */
+    #results { display: none; padding: 40px 0 80px; }
+
+    .wallet-header {
+      display: flex; align-items: center; gap: 16px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+    .wallet-avatar {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--green) 0%, var(--purple) 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .wallet-info h2 {
+      font-size: 20px; font-weight: 700;
+      font-family: var(--font-mono);
+      letter-spacing: -0.5px;
+    }
+    .wallet-info p {
+      font-size: 13px; color: var(--txt2);
+      margin-top: 2px;
+    }
+    .btn-copy {
+      background: none; border: 1px solid var(--border2);
+      color: var(--txt2); font-family: var(--font-mono);
+      font-size: 12px; padding: 6px 14px; border-radius: 8px;
+      cursor: pointer; transition: all 0.15s;
+      margin-left: auto;
+    }
+    .btn-copy:hover { border-color: var(--green); color: var(--green); }
+
+    .btn-another {
+      background: var(--card); border: 1px solid var(--border2);
+      color: var(--txt); font-family: var(--font-body);
+      font-size: 13px; font-weight: 600; padding: 8px 18px; border-radius: 10px;
+      cursor: pointer; transition: all 0.15s; text-decoration: none;
+      display: inline-block;
+    }
+    .btn-another:hover { border-color: var(--green); color: var(--green); }
+
+    /* ── Grid ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .span-2 { grid-column: span 2; }
+    @media (max-width: 768px) {
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+      .span-2 { grid-column: span 1; }
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+    }
+    .card-label {
+      font-size: 11px; font-weight: 600;
+      color: var(--txt3); letter-spacing: 1px;
+      text-transform: uppercase; margin-bottom: 12px;
+      font-family: var(--font-mono);
+    }
+    .card-value {
+      font-size: 36px; font-weight: 800;
+      font-family: var(--font-mono); letter-spacing: -2px;
+      line-height: 1;
+    }
+    .card-sub {
+      font-size: 13px; color: var(--txt2); margin-top: 6px;
+    }
+
+    /* ── Score Card ── */
+    .score-card {
+      background: linear-gradient(135deg, rgba(0,229,150,0.06) 0%, rgba(155,109,255,0.04) 100%);
+      border-color: rgba(0,229,150,0.2);
+    }
+    .score-main {
+      font-size: 64px; font-weight: 800;
+      font-family: var(--font-mono); letter-spacing: -4px;
+      color: var(--green); line-height: 1;
+      margin: 8px 0;
+    }
+    .score-max {
+      font-size: 20px; color: var(--txt3);
+      font-weight: 400; letter-spacing: -1px;
+    }
+
+    /* Score Gauge */
+    .gauge-wrap {
+      margin: 16px 0;
+      height: 6px;
+      background: var(--border);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .gauge-fill {
+      height: 100%;
+      border-radius: 100px;
+      background: linear-gradient(90deg, var(--green-dark), var(--green));
+      transition: width 1.2s cubic-bezier(0.4,0,0.2,1);
+      width: 0%;
+    }
+
+    /* ── Allocation Card ── */
+    .alloc-main {
+      font-size: 40px; font-weight: 800;
+      font-family: var(--font-mono); letter-spacing: -2px;
+      color: var(--green);
+    }
+    .alloc-range {
+      display: flex; gap: 16px; margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .range-item { font-size: 12px; }
+    .range-item .r-label { color: var(--txt3); font-family: var(--font-mono); }
+    .range-item .r-val   { color: var(--txt2); font-family: var(--font-mono); font-weight: 500; }
+
+    /* ── Mini Stats ── */
+    .mini-stat {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      text-align: center;
+    }
+    .mini-stat .ms-val {
+      font-size: 22px; font-weight: 700;
+      font-family: var(--font-mono); letter-spacing: -1px;
+      margin-bottom: 4px;
+    }
+    .mini-stat .ms-lbl {
+      font-size: 11px; color: var(--txt3);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .positive { color: var(--green); }
+    .negative { color: var(--red); }
+    .neutral  { color: var(--txt); }
+
+    /* ── Score Breakdown ── */
+    .breakdown-row {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 14px;
+    }
+    .breakdown-row:last-child { margin-bottom: 0; }
+    .breakdown-label {
+      font-size: 13px; color: var(--txt2);
+      width: 120px; flex-shrink: 0;
+    }
+    .breakdown-bar-wrap {
+      flex: 1;
+      height: 6px; background: var(--border);
+      border-radius: 100px; overflow: hidden;
+    }
+    .breakdown-bar {
+      height: 100%; border-radius: 100px;
+      background: var(--green);
+      transition: width 1s cubic-bezier(0.4,0,0.2,1);
+      width: 0%;
+    }
+    .breakdown-pts {
+      font-size: 13px; font-family: var(--font-mono);
+      color: var(--txt); width: 60px; text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* ── Badges ── */
+    .badge-grid {
+      display: flex; flex-wrap: wrap; gap: 10px;
+    }
+    .badge {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px;
+      border-radius: 100px;
+      font-size: 13px; font-weight: 600;
+      border: 1px solid;
+      cursor: default;
+      position: relative;
+    }
+    .badge[data-tier="platinum"] { background: rgba(155,109,255,0.1); border-color: rgba(155,109,255,0.3); color: var(--purple); }
+    .badge[data-tier="gold"]     { background: rgba(255,184,0,0.08);  border-color: rgba(255,184,0,0.25);  color: var(--yellow); }
+    .badge[data-tier="silver"]   { background: rgba(160,160,200,0.08);border-color: rgba(160,160,200,0.2); color: #B0B0CC; }
+    .badge[data-tier="bronze"]   { background: rgba(255,140,80,0.08); border-color: rgba(255,140,80,0.2);  color: #FF8C50; }
+    .badge-icon { font-size: 16px; }
+
+    /* ── Positions Table ── */
+    .tbl-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      text-align: left; padding: 10px 14px;
+      color: var(--txt3); font-weight: 600;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono);
+    }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    tbody tr:hover { background: rgba(255,255,255,0.02); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody td { padding: 12px 14px; color: var(--txt2); vertical-align: middle; }
+    tbody td.td-main { color: var(--txt); font-weight: 500; max-width: 280px; }
+    .td-main span {
+      display: -webkit-box; -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .td-mono { font-family: var(--font-mono); }
+    .tag {
+      display: inline-block; padding: 2px 8px; border-radius: 6px;
+      font-size: 11px; font-family: var(--font-mono);
+    }
+    .tag-yes { background: var(--green-dim); color: var(--green); }
+    .tag-no  { background: var(--red-dim);   color: var(--red); }
+    .tag-other { background: var(--border); color: var(--txt2); }
+    .status-open   { color: var(--green); font-size: 11px; }
+    .status-closed { color: var(--txt3);  font-size: 11px; }
+
+    /* ── Percentile Display ── */
+    .percentile-arc {
+      position: relative;
+      width: 120px; height: 64px;
+      margin: 0 auto 8px;
+    }
+    .percentile-val {
+      font-size: 32px; font-weight: 800;
+      font-family: var(--font-mono); letter-spacing: -2px;
+      color: var(--green);
+      text-align: center;
+    }
+    .percentile-label {
+      font-size: 12px; color: var(--txt3);
+      text-align: center; margin-top: 4px;
+    }
+
+    /* ── Section header ── */
+    .section-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .section-head h3 {
+      font-size: 16px; font-weight: 700;
+    }
+
+    /* ── Category Tags in chart area ── */
+    .cat-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+    .cat-tag {
+      font-size: 11px; font-family: var(--font-mono);
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--txt2); padding: 3px 10px; border-radius: 6px;
+    }
+
+    /* ── Share Button ── */
+    .btn-share {
+      background: linear-gradient(135deg, var(--green-dark), var(--green));
+      color: #000; border: none;
+      font-family: var(--font-body); font-size: 14px; font-weight: 700;
+      padding: 14px 28px; border-radius: 12px;
+      cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+      letter-spacing: -0.3px;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-share:hover  { opacity: 0.9; }
+    .btn-share:active { transform: scale(0.97); }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+      text-align: center;
+    }
+    footer p {
+      font-size: 12px; color: var(--txt3);
+      font-family: var(--font-mono); line-height: 1.8;
+    }
+    footer a { color: var(--txt2); text-decoration: none; }
+    footer a:hover { color: var(--green); }
+
+    /* ── Animations ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fadeUp 0.5s ease both; }
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+    .delay-4 { animation-delay: 0.4s; }
+    .delay-5 { animation-delay: 0.5s; }
+
+    /* ── Chart containers ── */
+    .chart-box { position: relative; height: 200px; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center; padding: 40px;
+      color: var(--txt3); font-size: 14px;
+    }
+    .empty-state .e-icon { font-size: 40px; margin-bottom: 12px; }
+
+    /* ── Spacing helpers ── */
+    .mt-4  { margin-top: 4px; }
+    .mt-8  { margin-top: 8px; }
+    .mt-16 { margin-top: 16px; }
+    .mt-24 { margin-top: 24px; }
+    .mt-32 { margin-top: 32px; }
+    .mb-16 { margin-bottom: 16px; }
+    .flex  { display: flex; }
+    .flex-center { display: flex; align-items: center; }
+    .gap-8  { gap: 8px; }
+    .gap-12 { gap: 12px; }
+    .muted { color: var(--txt3); }
+  </style>
+</head>
+<body>
+
+<!-- ── Navbar ───────────────────────────────────────── -->
+<nav>
+  <div class="inner">
+    <a href="/" class="logo">
+      <div class="logo-dot"></div>
+      PolyScope
+    </a>
+    <span class="nav-badge">⚠ COMMUNITY · NOT OFFICIAL</span>
+  </div>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────────── -->
+<section id="hero">
+  <div class="container z1">
+    <div class="glow-orb"></div>
+
+    <div class="hero-chip">🔬 Community Analytics Tool · Speculative Estimates</div>
+
+    <h1>
+      Your Polymarket<br/>
+      <span class="gradient-text">Participation Score</span>
+    </h1>
+
+    <p class="hero-sub">
+      Analyze any wallet's Polymarket trading activity, estimate ecosystem contribution,
+      and see where you rank. Community-built · Not affiliated with Polymarket.
+    </p>
+
+    <!-- Search -->
+    <div class="search-wrap">
+      <div class="search-box">
+        <input
+          type="text"
+          id="wallet-input"
+          placeholder="Enter wallet address (0x...)"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="42"
+        />
+        <button class="btn-check" id="check-btn" onclick="checkWallet()">
+          Analyze Wallet
+        </button>
+      </div>
+      <p class="search-hint">Paste any Ethereum/Polygon wallet address · ENS coming soon</p>
+    </div>
+
+    <!-- Stats row -->
+    <div class="stats-row">
+      <div class="stat-pill">
+        <div class="val">Live</div>
+        <div class="lbl">Polymarket Data</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-pill">
+        <div class="val">Free</div>
+        <div class="lbl">No Wallet Connect</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-pill">
+        <div class="val">Open</div>
+        <div class="lbl">Community Built</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Loading ───────────────────────────────────────── -->
+<div id="loading" class="container">
+  <div class="spinner"></div>
+  <p style="color:var(--txt2);font-size:15px;">Fetching on-chain data from Polymarket...</p>
+  <p class="loading-addr" id="loading-addr"></p>
+</div>
+
+<!-- ── Error ─────────────────────────────────────────── -->
+<div class="container">
+  <div id="error-box">
+    <strong>Error:</strong> <span id="error-msg"></span>
+    <div style="margin-top:12px;">
+      <button class="btn-another" onclick="resetUI()">← Try another wallet</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Results ───────────────────────────────────────── -->
+<section id="results">
+  <div class="container">
+
+    <!-- Disclaimer -->
+    <div class="disclaimer fade-up mb-16">
+      ⚠️&nbsp; <span>
+        <strong>Community-generated estimate model.</strong>
+        POLY token does not exist. All allocation figures are speculative and
+        based on community-designed heuristics. Not affiliated with, endorsed by,
+        or connected to Polymarket. Do not make financial decisions based on these estimates.
+      </span>
+    </div>
+
+    <!-- Wallet Header -->
+    <div class="wallet-header fade-up delay-1">
+      <div class="wallet-avatar" id="wallet-avatar">👤</div>
+      <div class="wallet-info">
+        <h2 id="wallet-display-addr">0x...</h2>
+        <p id="wallet-sub">Polymarket participant</p>
+      </div>
+      <button class="btn-copy" onclick="copyAddress()" title="Copy address">Copy</button>
+      <button class="btn-another" onclick="resetUI()">← Check another</button>
+    </div>
+
+    <!-- Top Row: Score | Allocation | Percentile -->
+    <div class="grid-3 mb-16 fade-up delay-2">
+
+      <!-- Score -->
+      <div class="card score-card">
+        <div class="card-label">Participation Score</div>
+        <div class="score-main" id="score-val">0<span class="score-max">/9000</span></div>
+        <div class="gauge-wrap mt-8">
+          <div class="gauge-fill" id="score-gauge"></div>
+        </div>
+        <div class="card-sub" id="score-sub">Calculating...</div>
+      </div>
+
+      <!-- Allocation -->
+      <div class="card">
+        <div class="card-label">Est. Token Allocation *</div>
+        <div class="alloc-main" id="alloc-mid">—</div>
+        <div style="font-size:12px;color:var(--txt3);margin-top:2px;">hypothetical POLY*</div>
+        <div class="alloc-range" id="alloc-range"></div>
+        <div class="card-sub mt-8" style="font-size:11px;color:var(--txt3);">
+          * Token does not exist. Speculative community estimate only.
+        </div>
+      </div>
+
+      <!-- Percentile -->
+      <div class="card" style="text-align:center;">
+        <div class="card-label" style="text-align:center;">Global Percentile</div>
+        <div class="percentile-val" id="pctile-val">—</div>
+        <div class="percentile-label" id="pctile-label">—</div>
+        <div style="margin-top:16px;">
+          <div style="font-size:11px;color:var(--txt3);margin-bottom:6px;font-family:var(--font-mono);">RELATIVE TO ECOSYSTEM</div>
+          <div class="gauge-wrap">
+            <div class="gauge-fill" id="pctile-gauge" style="background:linear-gradient(90deg,var(--purple),var(--green));"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini Stats Row -->
+    <div class="grid-4 mb-16 fade-up delay-3" id="mini-stats-row">
+      <div class="mini-stat">
+        <div class="ms-val neutral" id="stat-volume">—</div>
+        <div class="ms-lbl">Total Volume</div>
+      </div>
+      <div class="mini-stat">
+        <div class="ms-val neutral" id="stat-positions">—</div>
+        <div class="ms-lbl">Positions</div>
+      </div>
+      <div class="mini-stat">
+        <div class="ms-val neutral" id="stat-markets">—</div>
+        <div class="ms-lbl">Unique Markets</div>
+      </div>
+      <div class="mini-stat">
+        <div class="ms-val neutral" id="stat-winrate">—</div>
+        <div class="ms-lbl">Win Rate</div>
+      </div>
+    </div>
+
+    <!-- Score Breakdown + Category Chart -->
+    <div class="grid-2 mb-16 fade-up delay-3">
+
+      <!-- Breakdown -->
+      <div class="card">
+        <div class="card-label">Score Breakdown</div>
+        <div id="breakdown-list" style="margin-top:8px;"></div>
+      </div>
+
+      <!-- Category chart -->
+      <div class="card">
+        <div class="card-label">Market Categories Traded</div>
+        <div class="chart-box">
+          <canvas id="cat-chart"></canvas>
+        </div>
+        <div class="cat-list" id="cat-tags"></div>
+      </div>
+
+    </div>
+
+    <!-- PnL + Current Value -->
+    <div class="grid-2 mb-16 fade-up delay-4">
+      <div class="card">
+        <div class="card-label">Total P&amp;L</div>
+        <div class="card-value" id="stat-pnl">—</div>
+        <div class="card-sub">Unrealized + Realized</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Active Position Value</div>
+        <div class="card-value" id="stat-currval">—</div>
+        <div class="card-sub">Current open positions</div>
+      </div>
+    </div>
+
+    <!-- Badges -->
+    <div class="card mb-16 fade-up delay-4">
+      <div class="section-head">
+        <div class="card-label" style="margin-bottom:0;">Earned Badges</div>
+        <div style="font-size:12px;color:var(--txt3);" id="badge-count"></div>
+      </div>
+      <div class="badge-grid" id="badge-grid"></div>
+    </div>
+
+    <!-- Recent Positions Table -->
+    <div class="card mb-16 fade-up delay-5">
+      <div class="section-head">
+        <div class="card-label" style="margin-bottom:0;">Recent Positions</div>
+        <div style="font-size:12px;color:var(--txt3);">Showing up to 15</div>
+      </div>
+      <div class="tbl-wrap" id="positions-wrap"></div>
+    </div>
+
+    <!-- Share Row -->
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;" class="fade-up delay-5">
+      <button class="btn-share" onclick="shareOnTwitter()">
+        𝕏 Share on Twitter
+      </button>
+      <div style="font-size:12px;color:var(--txt3);font-family:var(--font-mono);">
+        Help others check their score
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── How It Works ───────────────────────────────────── -->
+<section id="how" style="padding:80px 0;border-top:1px solid var(--border);">
+  <div class="container">
+    <h2 style="font-size:32px;font-weight:800;letter-spacing:-1px;margin-bottom:12px;text-align:center;">
+      How It Works
+    </h2>
+    <p style="text-align:center;color:var(--txt2);max-width:480px;margin:0 auto 48px;">
+      We analyze your on-chain Polymarket activity using public data to generate a participation score.
+    </p>
+    <div class="grid-3">
+      <div class="card" style="text-align:center;">
+        <div style="font-size:40px;margin-bottom:16px;">🔍</div>
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;">1. Paste Your Wallet</h3>
+        <p style="font-size:13px;color:var(--txt2);">Enter any Polygon/Ethereum wallet address that has traded on Polymarket.</p>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div style="font-size:40px;margin-bottom:16px;">⚡</div>
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;">2. Live Data Fetch</h3>
+        <p style="font-size:13px;color:var(--txt2);">We query Polymarket's public Gamma API for your trading history and positions in real time.</p>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div style="font-size:40px;margin-bottom:16px;">🏆</div>
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;">3. Score + Estimate</h3>
+        <p style="font-size:13px;color:var(--txt2);">Our community scoring engine generates a participation score and speculative allocation estimate.</p>
+      </div>
+    </div>
+
+    <!-- Big disclaimer -->
+    <div class="disclaimer mt-32" style="max-width:700px;margin:48px auto 0;">
+      ⚠️&nbsp;
+      <span>
+        <strong>Important:</strong> PolyScope is a community tool. POLY token does not exist.
+        No airdrop has been announced. All estimates are community-generated speculation
+        based on public blockchain data. This platform is not affiliated with, endorsed by,
+        or connected to Polymarket in any official capacity.
+      </span>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ───────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <p>
+      <strong style="color:var(--txt2);">PolyScope</strong> — Community Analytics Tool<br/>
+      Not affiliated with Polymarket · Data sourced from Polymarket public API<br/>
+      POLY token does not exist · All estimates are speculative · Built by the community, for the community
+    </p>
+  </div>
+</footer>
+
+<!-- ── App Logic ─────────────────────────────────────── -->
+<script>
+  // ── State ──────────────────────────────────────────────
+  let currentWallet = null;
+  let currentData   = null;
+  let catChart      = null;
+
+  // ── Entry point ─────────────────────────────────────────
+  document.getElementById('wallet-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') checkWallet();
+  });
+
+  async function checkWallet() {
+    const raw = document.getElementById('wallet-input').value.trim();
+    if (!raw) return;
+
+    // Basic validation
+    if (!/^0x[a-fA-F0-9]{40}$/.test(raw)) {
+      showError('Please enter a valid Ethereum wallet address (0x followed by 40 hex characters).');
+      return;
+    }
+
+    currentWallet = raw.toLowerCase();
+    showLoading(currentWallet);
+
+    try {
+      const res  = await fetch(`/.netlify/functions/wallet?address=${currentWallet}`);
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        showError(data.error || 'Failed to fetch wallet data. Please try again.');
+        return;
+      }
+
+      currentData = data;
+      showResults(data);
+    } catch (err) {
+      showError('Network error — please check your connection and try again.');
+    }
+  }
+
+  // ── UI State ────────────────────────────────────────────
+  function showLoading(address) {
+    document.getElementById('hero').style.display    = 'none';
+    document.getElementById('how').style.display     = 'none';
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('error-box').style.display = 'none';
+    document.getElementById('check-btn').disabled    = true;
+    document.getElementById('loading-addr').textContent = truncate(address, 20);
+  }
+
+  function showError(msg) {
+    document.getElementById('loading').style.display  = 'none';
+    document.getElementById('hero').style.display     = 'block';
+    document.getElementById('how').style.display      = 'block';
+    document.getElementById('error-box').style.display = 'block';
+    document.getElementById('error-msg').textContent  = msg;
+    document.getElementById('check-btn').disabled     = false;
+  }
+
+  function resetUI() {
+    document.getElementById('hero').style.display    = 'block';
+    document.getElementById('how').style.display     = 'block';
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('error-box').style.display = 'none';
+    document.getElementById('check-btn').disabled    = false;
+    document.getElementById('wallet-input').value    = '';
+    document.getElementById('wallet-input').focus();
+  }
+
+  function showResults(data) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('check-btn').disabled    = false;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    renderWalletHeader(data);
+    renderScoreCard(data);
+    renderAllocationCard(data);
+    renderPercentile(data);
+    renderMiniStats(data.stats);
+    renderBreakdown(data.score.breakdown);
+    renderCategoryChart(data.stats.categories || {});
+    renderPnl(data.stats);
+    renderBadges(data.badges || []);
+    renderPositionsTable(data.stats.recentPositions || []);
+  }
+
+  // ── Renderers ───────────────────────────────────────────
+  function renderWalletHeader(data) {
+    const addr = data.address;
+    document.getElementById('wallet-display-addr').textContent =
+      addr.slice(0,6) + '...' + addr.slice(-4);
+    document.getElementById('wallet-sub').textContent =
+      data.stats.hasActivity
+        ? `${data.stats.positionCount} positions · ${data.stats.uniqueMarkets} unique markets`
+        : 'No Polymarket activity found for this wallet';
+    document.getElementById('wallet-avatar').textContent = getAvatarEmoji(data.score.total);
+  }
+
+  function getAvatarEmoji(score) {
+    if (score >= 7000) return '👑';
+    if (score >= 4000) return '🏆';
+    if (score >= 2000) return '⭐';
+    if (score >= 500)  return '🎯';
+    return '🌱';
+  }
+
+  function renderScoreCard(data) {
+    const score = data.score.total;
+    const el = document.getElementById('score-val');
+    el.innerHTML = `<span id="score-num">0</span><span class="score-max">/9000</span>`;
+    animateCounter('score-num', 0, score, 1200);
+    setTimeout(() => {
+      const pct = (score / 9000) * 100;
+      document.getElementById('score-gauge').style.width = pct + '%';
+    }, 100);
+    document.getElementById('score-sub').textContent = getScoreLabel(score);
+  }
+
+  function getScoreLabel(score) {
+    if (score >= 7000) return '🔥 Elite ecosystem participant';
+    if (score >= 4000) return '⭐ Power user · High contribution';
+    if (score >= 2000) return '📈 Active contributor';
+    if (score >= 700)  return '🌱 Growing presence';
+    if (score > 0)     return '✅ Ecosystem participant';
+    return 'No Polymarket activity detected';
+  }
+
+  function renderAllocationCard(data) {
+    const alloc = data.allocation;
+    document.getElementById('alloc-mid').textContent = fmt(alloc.mid);
+    document.getElementById('alloc-range').innerHTML = `
+      <div class="range-item">
+        <div class="r-label">LOW</div>
+        <div class="r-val">${fmt(alloc.low)}</div>
+      </div>
+      <div class="range-item">
+        <div class="r-label">HIGH</div>
+        <div class="r-val">${fmt(alloc.high)}</div>
+      </div>
+    `;
+  }
+
+  function renderPercentile(data) {
+    const pct = data.percentile;
+    document.getElementById('pctile-val').textContent = `Top ${(100 - pct).toFixed(1)}%`;
+    document.getElementById('pctile-label').textContent = `Percentile: ${pct.toFixed(1)}th`;
+    setTimeout(() => {
+      document.getElementById('pctile-gauge').style.width = pct + '%';
+    }, 100);
+  }
+
+  function renderMiniStats(stats) {
+    const vol    = document.getElementById('stat-volume');
+    const pos    = document.getElementById('stat-positions');
+    const mkts   = document.getElementById('stat-markets');
+    const winr   = document.getElementById('stat-winrate');
+
+    vol.textContent  = fmtUsd(stats.totalVolume);
+    pos.textContent  = stats.positionCount.toLocaleString();
+    mkts.textContent = stats.uniqueMarkets.toLocaleString();
+    winr.textContent = stats.resolvedCount > 0
+      ? (stats.winRate * 100).toFixed(1) + '%'
+      : 'N/A';
+
+    setColor(winr, stats.winRate >= 0.55 ? 'positive' : stats.winRate < 0.40 ? 'negative' : 'neutral');
+    setColor(vol, stats.totalVolume > 0 ? 'positive' : 'neutral');
+  }
+
+  function renderBreakdown(breakdown) {
+    if (!breakdown) return;
+    const MAX_TOTAL = 9000;
+    const rows = [
+      { label: 'Volume',       key: 'volume'        },
+      { label: 'Activity',     key: 'activity'       },
+      { label: 'Diversity',    key: 'diversity'      },
+      { label: 'Categories',   key: 'categories'     },
+      { label: 'Win Rate',     key: 'winRate'        },
+      { label: 'Profitability',key: 'profitability'  },
+      { label: 'Early Adopter',key: 'earlyAdopter'   },
+    ];
+
+    const container = document.getElementById('breakdown-list');
+    container.innerHTML = rows.map(r => {
+      const pts = breakdown[r.key] || 0;
+      const pct = Math.min((pts / MAX_TOTAL) * 100 * 3.5, 100); // visual width
+      return `
+        <div class="breakdown-row">
+          <div class="breakdown-label">${r.label}</div>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" data-pct="${pct}"></div>
+          </div>
+          <div class="breakdown-pts">+${pts}</div>
+        </div>`;
+    }).join('');
+
+    // Animate bars
+    setTimeout(() => {
+      document.querySelectorAll('.breakdown-bar').forEach(bar => {
+        bar.style.width = bar.dataset.pct + '%';
+      });
+    }, 200);
+  }
+
+  function renderCategoryChart(categories) {
+    const entries = Object.entries(categories).sort((a,b) => b[1]-a[1]);
+    if (entries.length === 0) return;
+
+    const labels = entries.map(([k]) => k);
+    const values = entries.map(([,v]) => v);
+    const colors = [
+      '#00E596','#9B6DFF','#00B8FF','#FFB800','#FF4D6A',
+      '#00D4FF','#FF6B6B','#4ECDC4','#45B7D1','#96CEB4'
+    ];
+
+    if (catChart) catChart.destroy();
+
+    const ctx = document.getElementById('cat-chart').getContext('2d');
+    catChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: colors.slice(0, labels.length).map(c => c + '99'),
+          borderColor: colors.slice(0, labels.length),
+          borderWidth: 1.5,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.label}: ${ctx.raw} position${ctx.raw !== 1 ? 's' : ''}`
+            }
+          }
+        },
+        cutout: '65%',
+      }
+    });
+
+    // Category tags
+    const tagContainer = document.getElementById('cat-tags');
+    tagContainer.innerHTML = labels.slice(0, 8).map((l, i) =>
+      `<span class="cat-tag" style="border-color:${colors[i]}44;color:${colors[i]}">${l}: ${values[i]}</span>`
+    ).join('');
+  }
+
+  function renderPnl(stats) {
+    const pnlEl = document.getElementById('stat-pnl');
+    const cvEl  = document.getElementById('stat-currval');
+    const pnl   = stats.totalPnl;
+
+    pnlEl.textContent = (pnl >= 0 ? '+' : '') + fmtUsd(pnl);
+    setColor(pnlEl, pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral');
+
+    cvEl.textContent  = fmtUsd(stats.currentValue);
+    setColor(cvEl, stats.currentValue > 0 ? 'positive' : 'neutral');
+  }
+
+  function renderBadges(badges) {
+    const grid = document.getElementById('badge-grid');
+    document.getElementById('badge-count').textContent =
+      `${badges.length} badge${badges.length !== 1 ? 's' : ''} earned`;
+
+    if (!badges.length) {
+      grid.innerHTML = '<div class="empty-state"><div class="e-icon">🎖️</div>No badges yet. Start trading to earn badges!</div>';
+      return;
+    }
+
+    grid.innerHTML = badges.map(b => `
+      <div class="badge" data-tier="${b.tier}" title="${b.desc}">
+        <span class="badge-icon">${b.icon}</span>
+        ${b.name}
+      </div>
+    `).join('');
+  }
+
+  function renderPositionsTable(positions) {
+    const wrap = document.getElementById('positions-wrap');
+
+    if (!positions || positions.length === 0) {
+      wrap.innerHTML = '<div class="empty-state"><div class="e-icon">📊</div>No positions found for this wallet.</div>';
+      return;
+    }
+
+    wrap.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Market</th>
+            <th>Category</th>
+            <th>Outcome</th>
+            <th>Invested</th>
+            <th>P&amp;L</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${positions.map(p => `
+            <tr>
+              <td class="td-main"><span>${esc(p.question)}</span></td>
+              <td><span class="cat-tag" style="font-size:10px;">${esc(p.category)}</span></td>
+              <td>
+                <span class="tag ${p.outcome === 'Yes' ? 'tag-yes' : p.outcome === 'No' ? 'tag-no' : 'tag-other'}">
+                  ${esc(p.outcome || '—')}
+                </span>
+              </td>
+              <td class="td-mono">$${(p.initialValue||0).toFixed(2)}</td>
+              <td class="td-mono ${p.cashPnl > 0 ? 'positive' : p.cashPnl < 0 ? 'negative' : ''}">
+                ${p.cashPnl >= 0 ? '+' : ''}$${(p.cashPnl||0).toFixed(2)}
+              </td>
+              <td>
+                <span class="${p.closed ? 'status-closed' : 'status-open'}">
+                  ${p.closed ? 'Closed' : 'Open'}
+                </span>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  // ── Share ───────────────────────────────────────────────
+  function shareOnTwitter() {
+    if (!currentData) return;
+    const score = currentData.score.total;
+    const alloc = currentData.allocation.mid;
+    const pct   = (100 - currentData.percentile).toFixed(1);
+    const addr  = currentWallet.slice(0,6) + '...' + currentWallet.slice(-4);
+
+    const text = [
+      `My @Polymarket participation score: ${score.toLocaleString()}/9,000`,
+      `Est. community allocation: ${fmt(alloc)} POLY* (Top ${pct}%)`,
+      ``,
+      `Check yours: ${window.location.origin}`,
+      ``,
+      `*Community estimate only, POLY token doesn't exist yet`,
+      `#Polymarket #PredictionMarkets`,
+    ].join('\n');
+
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
+  }
+
+  // ── Helpers ─────────────────────────────────────────────
+  function copyAddress() {
+    if (!currentWallet) return;
+    navigator.clipboard.writeText(currentWallet).then(() => {
+      const btn = document.querySelector('.btn-copy');
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    });
+  }
+
+  function animateCounter(id, from, to, duration) {
+    const el  = document.getElementById(id);
+    if (!el) return;
+    const step = (to - from) / (duration / 16);
+    let current = from;
+    const timer = setInterval(() => {
+      current = Math.min(current + step, to);
+      el.textContent = Math.round(current).toLocaleString();
+      if (current >= to) clearInterval(timer);
+    }, 16);
+  }
+
+  function fmt(n) {
+    if (n === undefined || n === null) return '—';
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
+    if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';
+    return n.toLocaleString();
+  }
+
+  function fmtUsd(n) {
+    if (n === undefined || n === null || n === 0) return '$0.00';
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    if (abs >= 1_000_000) return sign + '$' + (abs / 1_000_000).toFixed(2) + 'M';
+    if (abs >= 1_000)     return sign + '$' + (abs / 1_000).toFixed(2) + 'K';
+    return sign + '$' + abs.toFixed(2);
+  }
+
+  function truncate(str, maxLen) {
+    if (!str) return '';
+    if (str.length <= maxLen) return str;
+    const half = Math.floor(maxLen / 2);
+    return str.slice(0, half) + '...' + str.slice(-half);
+  }
+
+  function setColor(el, cls) {
+    el.classList.remove('positive', 'negative', 'neutral');
+    el.classList.add(cls);
+  }
+
+  function esc(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+
+</body>
+</html>
